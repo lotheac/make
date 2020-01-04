@@ -49,10 +49,10 @@
  *	register a new job running commands associated with building gn.
  */
 extern void Job_Make(GNode *);
-/* Job_Init(maxproc);
+/* Job_Init(maxproc, jobserverfd);
  *	setup job handling framework
  */
-extern void Job_Init(int);
+extern void Job_Init(int, int);
 
 /* save signal mask at start */
 extern void Sigset_Init();
@@ -95,9 +95,12 @@ extern Job *runningJobs, *errorJobs, *availableJobs;
 extern void debug_job_printf(const char *, ...);
 extern void handle_one_job(Job *);
 extern int check_dying_signal(void);
+extern bool reap_jobs(void);
+extern const char *shortened_curdir(void);
 
 extern const char *basedirectory;
 
 extern bool	sequential;	/* True if we are running one single-job */
+
 
 #endif /* _JOB_H_ */

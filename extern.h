@@ -52,5 +52,8 @@ extern bool	touchFlag;	/* true if targets should just be 'touched'
 extern bool	queryFlag;	/* true if we aren't supposed to really make
 				 * anything, just see if the targets are out-
 				 * of-date */
+extern bool	usejobserver;	/* true if we should use jobserver instead of
+				   "expensive" heuristics to avoid exponential
+				   -j behavior */
 
 #endif

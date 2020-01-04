@@ -612,6 +612,7 @@ job_attach_node(Job *job, GNode *node)
 	job->exit_type = JOB_EXIT_OKAY;
 	job->location = NULL;
 	job->flags = 0;
+	job->token_type = JOB_TOKEN_NONE;
 }
 
 void

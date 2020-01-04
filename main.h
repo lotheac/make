@@ -29,6 +29,9 @@
 /* main
  *	User interface to make.
  */
+
+#define MAKEFLAGS	".MAKEFLAGS"
+
 /* Main_ParseArgLine(string);
  *	Parse string as a line of arguments, and treats them as if they
  *	were given at make's invocation. Used to implement .MFLAGS. */

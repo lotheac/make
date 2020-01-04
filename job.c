@@ -84,9 +84,12 @@
 
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
+#include <err.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -96,6 +99,7 @@
 #include "config.h"
 #include "defines.h"
 #include "job.h"
+#include "jobserver.h"
 #include "engine.h"
 #include "pathnames.h"
 #include "var.h"
@@ -137,7 +141,6 @@ static void postprocess_job(Job *);
 static void determine_job_next_step(Job *);
 static void may_continue_job(Job *);
 static Job *reap_finished_job(pid_t);
-static bool reap_jobs(void);
 static void may_continue_heldback_jobs(void);
 
 static bool expensive_job(Job *);
@@ -206,7 +209,7 @@ buf_addcurdir(BUFFER *buf)
 	Buf_AddString(buf, v);
 }
 
-static const char *
+const char *
 shortened_curdir(void)
 {
 	static BUFFER buf;
@@ -530,6 +533,8 @@ debug_kill_printf(const char *fmt, ...)
 static void
 postprocess_job(Job *job)
 {
+	if (usejobserver)
+		jobserver_release_token(job);
 	if (job->exit_type == JOB_EXIT_OKAY &&
 	    aborting != ABORT_ERROR &&
 	    aborting != ABORT_INTERRUPT) {
@@ -579,7 +584,8 @@ determine_expensive_job(Job *job)
 { 
 	if (expensive_job(job)) {
 		job->flags |= JOB_IS_EXPENSIVE;
-		no_new_jobs = true;
+		if (!usejobserver)
+			no_new_jobs = true;
 	} else
 		job->flags &= ~JOB_IS_EXPENSIVE;
 	if (DEBUG(EXPENSIVE))
@@ -651,14 +657,18 @@ expensive_command(const char *s)
 static void
 may_continue_job(Job *job)
 {
-	if (no_new_jobs) {
+	if (!usejobserver && no_new_jobs) {
 		if (DEBUG(EXPENSIVE))
 			fprintf(stderr, "[%ld] expensive -> hold %s\n",
 			    (long)mypid, job->node->name);
 		job->next = heldJobs;
 		heldJobs = job;
 	} else {
-		bool finished = job_run_next(job);
+		bool finished;
+
+		if (usejobserver)
+			jobserver_acquire_token(job);
+		finished = job_run_next(job);
 		if (finished)
 			postprocess_job(job);
 		else if (!sequential)
@@ -707,7 +717,7 @@ Job_Make(GNode *gn)
 static void
 determine_job_next_step(Job *job)
 {
-	if (job->flags & JOB_IS_EXPENSIVE) {
+	if (!usejobserver && job->flags & JOB_IS_EXPENSIVE) {
 		no_new_jobs = false;
 		if (DEBUG(EXPENSIVE))
 			fprintf(stderr, "[%ld] "
@@ -748,7 +758,7 @@ reap_finished_job(pid_t pid)
  * classic waitpid handler: retrieve as many dead children as possible.
  * returns true if succesful
  */
-static bool
+bool
 reap_jobs(void)
 {
  	pid_t pid;	/* pid of dead child */
@@ -786,7 +796,7 @@ handle_running_jobs(void)
 	/* reaping children in the presence of caught signals */
 
 	/* first, we make sure to hold on new signals, to synchronize
-	 * reception of new stuff on sigsuspend
+	 * reception of new stuff on ppoll
 	 */
 	sigprocmask(SIG_BLOCK, &sigset, NULL);
 	/* note this will NOT loop until runningJobs == NULL.
@@ -795,6 +805,11 @@ handle_running_jobs(void)
 	 * gets reaped, we WILL exit the loop through the break.
 	 */
 	while (runningJobs != NULL) {
+		struct pollfd pfd = {
+			.fd = -1,
+			.events = POLLIN,
+		};
+		int r;
 		/* did we already have pending stuff that advances things ?
 		 * then handle_all_signals() will not return
 		 * or reap_jobs() will reap_jobs()
@@ -802,10 +817,28 @@ handle_running_jobs(void)
 		handle_all_signals();
 		if (reap_jobs())
 			break;
-		/* okay, so it's safe to suspend, we have nothing to do but
-		 * wait...
-		 */
-		sigsuspend(&emptyset);
+		if (usejobserver && jobserver_is_master())
+			pfd.fd = jobserver_get_master_fd();
+
+		/* Wait for a signal or for a slave to communicate over
+		 * the jobserver socket */
+		r = ppoll(&pfd, 1, NULL, &emptyset);
+		if (r == -1 && errno == EINTR)
+			continue;
+		if (jobserver_is_master()) {
+			if (r == -1)
+				Punt("jobserver master: poll failed");
+
+			if (pfd.revents & (POLLHUP|POLLERR|POLLNVAL)) {
+				warnx("jobserver master: error on socket %d, "
+				    "disabling jobserver",
+				    jobserver_get_master_fd());
+				jobserver_shutdown();
+				continue;
+			}
+			if (pfd.revents & POLLIN)
+				jobserver_master_communicate();
+		}
 	}
 	reset_signal_mask();
 }
@@ -818,7 +851,7 @@ loop_handle_running_jobs()
 }
 
 void
-Job_Init(int maxJobs)
+Job_Init(int maxJobs, int jobserverfd)
 {
 	Job *j;
 	int i;
@@ -838,6 +871,7 @@ Job_Init(int maxJobs)
 	}
 	extra_job = &j[maxJobs];
 	mypid = getpid();
+	jobserver_init(jobserverfd, maxJobs);
 
 	aborting = 0;
 	setup_all_signals();
@@ -850,6 +884,7 @@ can_start_job(void)
 		return false;
 	else
 		return true;
+	return true;
 }
 
 bool

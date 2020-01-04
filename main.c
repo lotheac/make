@@ -41,6 +41,7 @@
 #include <sys/utsname.h>
 #include <err.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,6 +58,7 @@
 #include "pathnames.h"
 #include "init.h"
 #include "job.h"
+#include "jobserver.h"
 #include "targ.h"
 #include "suff.h"
 #include "str.h"
@@ -66,8 +68,6 @@
 #include "dump.h"
 #include "enginechoice.h"
 
-#define MAKEFLAGS	".MAKEFLAGS"
-
 static LIST		to_create; 	/* Targets to be made */
 Lst create = &to_create;
 bool 		allPrecious;	/* .PRECIOUS given on line by itself */
@@ -76,6 +76,7 @@ static bool	noBuiltins;	/* -r flag */
 static LIST	makefiles;	/* ordered list of makefiles to read */
 static LIST	varstoprint;	/* list of variables to print */
 static int	optj;		/* -j argument */
+static int	jobserverfd = -1; /* -J argument */
 static bool 	compatMake;	/* -B argument */
 static bool	forceJobs = false;
 int 		debug;		/* -d flag */
@@ -86,6 +87,7 @@ bool 		touchFlag;	/* -t flag */
 bool 		ignoreErrors;	/* -i flag */
 bool 		beSilent;	/* -s flag */
 bool		dumpData;	/* -p flag */
+bool		usejobserver = false; /* -x flag */
 
 struct dirs {
 	char *current;
@@ -192,7 +194,7 @@ MainParseArgs(int argc, char **argv)
 {
 	int c, optend;
 
-#define OPTFLAGS "BC:D:I:SV:d:ef:ij:km:npqrst"
+#define OPTFLAGS "BC:D:I:J:SV:d:ef:ij:km:npqrstx"
 #define OPTLETTERS "BSiknpqrst"
 
 	if (pledge("stdio rpath wpath cpath fattr proc exec", NULL) == -1)
@@ -223,6 +225,18 @@ MainParseArgs(int argc, char **argv)
 			Parse_AddIncludeDir(optarg);
 			record_option(c, optarg);
 			break;
+		case 'J': {
+			const char *errstr;
+
+			usejobserver = true;
+			jobserverfd = strtonum(optarg, STDERR_FILENO + 1,
+			    INT_MAX, &errstr);
+			if (errstr != NULL)
+				errx(1, "illegal argument -J%s: "
+				    "fd number is %s", optarg, errstr);
+			record_option(c, optarg);
+			break;
+		}
 		case 'V':
 			Lst_AtEnd(&varstoprint, optarg);
 			record_option(c, optarg);
@@ -270,7 +284,7 @@ MainParseArgs(int argc, char **argv)
 					debug |= DEBUG_JOB | DEBUG_KILL;
 					break;
 				case 'J':
-					/* ignore */
+					debug |= DEBUG_JOBSERVER;
 					break;
 				case 'k':
 					debug |= DEBUG_KILL;
@@ -331,6 +345,10 @@ MainParseArgs(int argc, char **argv)
 		case 'm':
 			Dir_AddDir(systemIncludePath, optarg);
 			record_option(c, optarg);
+			break;
+		case 'x':
+			usejobserver = true;
+			/* don't record_option; -J implies this for children */
 			break;
 		case -1:
 			/* Check for variable assignments and targets. */
@@ -724,6 +742,20 @@ main(int argc, char **argv)
 	if (!forceJobs)
 		compatMake = true;
 
+	if (compatMake)
+		optj = 1;
+
+	Job_Init(optj, jobserverfd);
+	if (usejobserver && jobserverfd == -1) {
+		char optstr[16];
+
+		/* We are jobserver master; add -J for children */
+		if (snprintf(optstr, sizeof(optstr), "%d",
+		    jobserver_get_slave_fd()) < 0)
+			err(1, "could not create -J option string");
+		record_option('J', optstr);
+	}
+
 	/* And set up everything for sub-makes */
 	Var_AddCmdline(MAKEFLAGS);
 
@@ -757,9 +789,6 @@ main(int argc, char **argv)
 	    add_dirpath(systemIncludePath, syspath);
 
 	read_all_make_rules(noBuiltins, read_depend, &makefiles, &d);
-
-	if (compatMake)
-		optj = 1;
 
 	Var_Append("MFLAGS", Var_Value(MAKEFLAGS));
 
@@ -801,7 +830,6 @@ main(int argc, char **argv)
 			Targ_FindList(&targs, create);
 
 		choose_engine(compatMake);
-		Job_Init(optj);
 		if (!queryFlag && node_is_real(begin_node))
 			run_node(begin_node, &errored, &outOfDate);
 
