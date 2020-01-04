@@ -81,6 +81,12 @@ extern void Make_DoAllVar(GNode *);
  */
 extern int run_gnode(GNode *);
 
+enum job_token_type {
+	JOB_TOKEN_NONE,
+	JOB_TOKEN_IMPLICIT,
+	JOB_TOKEN_SEM,
+};
+
 /*-
  * Job Table definitions.
  *
@@ -117,6 +123,8 @@ struct Job_ {
 	LstNode		next_cmd;	/* Next command to run */
 	char		*cmd;		/* Last command run */
 	GNode		*node;	    	/* Target of this job */
+	enum job_token_type token_type; /* the type of jobserver token
+					   currently held by this job */
 };
 
 /* Continuation-style running commands for the parallel engine */

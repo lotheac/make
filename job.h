@@ -95,6 +95,8 @@ extern Job *runningJobs, *errorJobs, *availableJobs;
 extern void debug_job_printf(const char *, ...);
 extern void handle_one_job(Job *);
 extern int check_dying_signal(void);
+extern bool reap_jobs(void);
+extern const char *shortened_curdir(void);
 
 extern const char *basedirectory;
 

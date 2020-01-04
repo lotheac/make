@@ -57,6 +57,7 @@
 #include "pathnames.h"
 #include "init.h"
 #include "job.h"
+#include "jobserver.h"
 #include "targ.h"
 #include "suff.h"
 #include "str.h"
@@ -86,6 +87,7 @@ bool 		touchFlag;	/* -t flag */
 bool 		ignoreErrors;	/* -i flag */
 bool 		beSilent;	/* -s flag */
 bool		dumpData;	/* -p flag */
+bool		usejobserver = false; /* -x flag */
 
 struct dirs {
 	char *current;
@@ -192,7 +194,7 @@ MainParseArgs(int argc, char **argv)
 {
 	int c, optend;
 
-#define OPTFLAGS "BC:D:I:SV:d:ef:ij:km:npqrst"
+#define OPTFLAGS "BC:D:I:SV:d:ef:ij:km:npqrstx"
 #define OPTLETTERS "BSiknpqrst"
 
 	if (pledge("stdio rpath wpath cpath fattr proc exec", NULL) == -1)
@@ -270,7 +272,7 @@ MainParseArgs(int argc, char **argv)
 					debug |= DEBUG_JOB | DEBUG_KILL;
 					break;
 				case 'J':
-					/* ignore */
+					debug |= DEBUG_JOBSERVER;
 					break;
 				case 'k':
 					debug |= DEBUG_KILL;
@@ -330,6 +332,10 @@ MainParseArgs(int argc, char **argv)
 		}
 		case 'm':
 			Dir_AddDir(systemIncludePath, optarg);
+			record_option(c, optarg);
+			break;
+		case 'x':
+			usejobserver = true;
 			record_option(c, optarg);
 			break;
 		case -1:
