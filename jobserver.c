@@ -307,6 +307,13 @@ jobserver_acquire_token(Job *job)
 	};
 	enum state state = STATE_INIT;
 
+	if (job->token_type != JOB_TOKEN_NONE) {
+		JOBSERVER_DEBUG("target %s: already have token (%s)",
+		    job->node->name,
+		    job->token_type == JOB_TOKEN_LOCAL ? "local" : "remote");
+		return;
+	}
+
 	if (jobserver_is_master()) {
 		jobserver_decrement_token(job);
 		return;
