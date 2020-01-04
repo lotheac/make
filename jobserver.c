@@ -43,8 +43,11 @@ struct jobserver {
 				   process must wait for a token to start a
 				   job. */
 	unsigned max_tokens;	/* maximum number of tokens */
-	unsigned waiting;	/* master only: number of slaves currently
-				   waiting for a token */
+	unsigned waiting;	/* master only: number of slaves that have
+				   requested a token that has not yet been
+				   provided */
+	unsigned offered;	/* master only: number of tokens offered to
+				   slaves (ie. already sent to socket) */
 };
 static struct jobserver jobserver;
 
@@ -63,11 +66,13 @@ static pid_t mypid;
 		    __VA_ARGS__);				\
 } while(0)
 
-int
-jobserver_get_master_fd(void)
-{
-	return jobserver.master;
-}
+enum jobserver_message {
+	JMSG_REQ	= '?',
+	JMSG_CANCEL	= '!',
+	JMSG_OFFER	= '.',
+	JMSG_ACK	= '-',
+	JMSG_RELEASE	= '+',
+};
 
 int
 jobserver_get_slave_fd(void)
@@ -103,7 +108,8 @@ jobserver_disable(void)
 	 * exiting from jobserver_release_token().
 	 *
 	 * NOTE: we don't edit MAKEFLAGS, so future children of this make will
-	 * still receive -J and -j. */
+	 * still receive -J and -j. they should likewise fall back to
+	 * sequential once they try to communicate over the invalid socket. */
 	Job_Wait();
 	jobserver_shutdown();
 	sequential = 1;
@@ -172,56 +178,103 @@ jobserver_token_available(void)
 	return jobserver.tokens > 0;
 }
 
+static bool
+jobserver_master_can_offer(void)
+{
+	return (jobserver.offered < jobserver.waiting &&
+	    jobserver.offered < jobserver.tokens);
+}
+
 void
-jobserver_master_communicate(void)
+jobserver_master_setup_pollfd(struct pollfd *pfd)
+{
+	pfd->fd = jobserver.master;
+	pfd->events = POLLIN;
+	if (jobserver_master_can_offer())
+		pfd->events |= POLLOUT;
+}
+
+void
+jobserver_master_communicate(const struct pollfd *pfd)
 {
 	ssize_t r;
 	char tok[64];
-	unsigned reclaimed = 0, requested = 0, sent = 0;
+	unsigned requested = 0, cancelled = 0, acked = 0, reclaimed = 0;
 
 	assert(jobserver_is_master());
 
-	do {
-		if ((r = recv(jobserver.master, tok, sizeof(tok),
-		    MSG_DONTWAIT)) == -1) {
-			if (errno == EAGAIN)
-				break;
-			Punt("jobserver token reclaim failed: recv: %s",
-			    strerror(errno));
-		}
-		for (const char *c = tok; c < tok + r; c++) {
-			if (*c == '-')
-				requested++;
-			else if (*c == '+')
-				reclaimed++;
-			else
-				Punt("unknown job token '%c' received from "
-				    "slave", *c);
-		}
-	} while (r > 0);
-
-	jobserver.tokens += reclaimed;
-	jobserver.waiting += requested;
-
-	if (jobserver.tokens > jobserver.max_tokens)
-		Punt("jobserver token reclaim: total %u exceeds "
-		    "maximum %d", jobserver.tokens, jobserver.max_tokens);
-
-	while (jobserver.waiting != 0) {
-		if (!jobserver_token_available())
-			break;
-
-		if ((r = send(jobserver.master, ".", 1, 0)) == -1) {
-			Punt("jobserver token send failed: %s",
-			    strerror(errno));
-		}
-		jobserver.tokens -= r;
-		jobserver.waiting -= r;
-		sent += r;
+	if (pfd->revents & (POLLHUP|POLLERR|POLLNVAL)) {
+		warnx("jobserver master: error on socket %d, disabling "
+		    "jobserver", jobserver.master);
+		jobserver_shutdown();
+		return;
 	}
 
-	JOBSERVER_DEBUG("%u tokens reclaimed, %u sent, %u available, %u jobs "
-	    "waiting", reclaimed, sent, jobserver.tokens, jobserver.waiting);
+	if (pfd->revents & POLLIN) {
+		if ((r = recv(jobserver.master, tok, sizeof(tok), 0)) == -1)
+			Punt("jobserver token reclaim failed: recv: %s",
+			    strerror(errno));
+		for (const char *c = tok; c < tok + r; c++) {
+			enum jobserver_message msg = *c;
+			switch (msg) {
+			case JMSG_REQ:
+				requested++;
+				break;
+			case JMSG_CANCEL:
+				cancelled++;
+				break;
+			case JMSG_ACK:
+				acked++;
+				break;
+			case JMSG_RELEASE:
+				reclaimed++;
+				break;
+			default:
+				Punt("unknown job token '%c' received from "
+				    "slave", *c);
+			}
+		}
+	}
+
+	jobserver.tokens += reclaimed;
+
+	if (jobserver.tokens > jobserver.max_tokens)
+		Punt("jobserver master reclaimed too many tokens: total %u "
+		    "exceeds maximum %u", jobserver.tokens,
+		    jobserver.max_tokens);
+
+	jobserver.waiting += requested;
+	/* slaves may send cancel messages after we've already made an offer
+	 * for their request, but before sending an ack. in that case we will
+	 * have extra offer(s) in the socket buffers until some slave receives
+	 * them. if that happens, set waiting to 0. */
+	if (jobserver.waiting < cancelled)
+		jobserver.waiting = 0;
+	else
+		jobserver.waiting -= cancelled;
+	if (jobserver.tokens < acked || jobserver.offered < acked)
+		Punt("jobserver master got too many acks: %u tokens "
+		    "available, %u offers, %u acks received", jobserver.tokens,
+		    jobserver.offered, acked);
+	jobserver.tokens -= acked;
+	jobserver.offered -= acked;
+
+	while (jobserver_master_can_offer()) {
+		enum jobserver_message msg = JMSG_OFFER;
+		if ((r = send(jobserver.master, &msg, 1, 0)) == -1) {
+			if (errno == EAGAIN)
+				break;
+			Punt("jobserver master token offer failed: %s",
+			    strerror(errno));
+		}
+		jobserver.offered += r;
+		jobserver.waiting -= r;
+	}
+
+	JOBSERVER_DEBUG("%u req, %u cancel, %u ack, %u reclaim. %u tokens "
+	    "available, %u jobs waiting, %u unacked offers",
+	    requested, cancelled, acked, reclaimed, jobserver.tokens,
+	    jobserver.waiting, jobserver.offered);
 }
 
 static void
@@ -245,27 +298,53 @@ jobserver_acquire_token(Job *job)
 	ssize_t r;
 	char c;
 	bool acquired = false, requested = false;
+	enum state {
+		STATE_INIT,
+		STATE_REQD,
+		STATE_RECVD,
+		STATE_ACKED,
+		STATE_NEEDCANCEL,
+	};
+	enum state state = STATE_INIT;
 
-	if (jobserver_token_available()) {
+	if (jobserver_is_master()) {
 		jobserver_decrement_token(job);
 		return;
 	}
 
-	/* master process should never get here without tokens available. */
-	if (jobserver_is_master())
-		Punt("jobserver master ran out of tokens");
-
-	JOBSERVER_DEBUG("target %s: waiting for token", job->node->name);
-
-	while (!acquired) {
+	while (state != STATE_ACKED) {
 		struct pollfd pfd = {
 			.fd = jobserver.slave,
 		};
 
-		if (!requested)
+		switch (state) {
+		case STATE_INIT:
+			/* use local token if available */
+			if (jobserver_token_available()) {
+				jobserver_decrement_token(job);
+				return;
+			}
+			JOBSERVER_DEBUG("target %s: requesting remote token",
+			    job->node->name);
 			pfd.events = POLLOUT;
-		else
+			break;
+		case STATE_REQD:
+			/* if reap_jobs() returned the local token while we
+			 * were waiting for a remote one, cancel the request
+			 * and use the local token */
+			if (jobserver_token_available()) {
+				state = STATE_NEEDCANCEL;
+				continue;
+			}
 			pfd.events = POLLIN;
+			break;
+		case STATE_RECVD:
+		case STATE_NEEDCANCEL:
+			pfd.events = POLLOUT;
+			break;
+		case STATE_ACKED:
+			continue;
+		}
 
 		/* if either ppoll or recv fails below, we are no longer able
 		 * to communicate to the jobserver master. we must disable the
@@ -286,16 +365,8 @@ jobserver_acquire_token(Job *job)
 
 		if ((r = ppoll(&pfd, 1, NULL, &emptyset)) == -1) {
 			if (errno == EINTR) {
-				/* we received a signal; handle it and any
-				 * finished jobs. */
 				handle_all_signals();
-				/* if we reap a job with JOB_TOKEN_LOCAL, we
-				 * that local token should now be available.
-				 * if so, stop waiting. */
-				if (reap_jobs() && jobserver_token_available()) {
-					jobserver_decrement_token(job);
-					return;
-				}
+				reap_jobs();
 				continue;
 			}
 			warn("disabling jobserver: token poll failed");
@@ -316,20 +387,33 @@ jobserver_acquire_token(Job *job)
 			return;
 		}
 
+		r = -1;
+
 		if (pfd.revents & POLLOUT) {
-			if ((r = send(jobserver.slave, "-", 1, 0)) == -1) {
+			enum jobserver_message msg;
+
+			if (state == STATE_INIT)
+				msg = JMSG_REQ;
+			else if (state == STATE_RECVD)
+				msg = JMSG_ACK;
+			else if (state == STATE_NEEDCANCEL)
+				msg = JMSG_CANCEL;
+
+			if ((r = send(jobserver.slave, &msg, 1, 0)) == -1) {
 				if (errno == EAGAIN)
 					continue;
-				warn("disabling jobserver: token request "
+				warn("disabling jobserver: communication "
 				    "failed");
 				jobserver_disable();
 				return;
 			}
-			requested = (r == 1);
-			continue;
-		}
 
-		if (pfd.revents & POLLIN) {
+			if (state == STATE_NEEDCANCEL) {
+				/* request cancelled, go back to init state */
+				state = STATE_INIT;
+				continue;
+			}
+		} else if (pfd.revents & POLLIN) {
 			if ((r = recv(jobserver.slave, &c, 1, 0)) == -1) {
 				if (errno == EAGAIN)
 					continue;
@@ -338,12 +422,12 @@ jobserver_acquire_token(Job *job)
 				jobserver_disable();
 				return;
 			}
-			acquired = (r == 1);
 		}
+		if (r == 1)
+			state++;
 	}
 
 	job->token_type = JOB_TOKEN_REMOTE;
-
 	JOBSERVER_DEBUG("target %s: acquired token", job->node->name);
 }
 
@@ -367,7 +451,7 @@ jobserver_release_token(Job *job)
 			    "available", job->node->name, jobserver.tokens);
 			if (jobserver.tokens > jobserver.max_tokens)
 				Punt("jobserver master: token release: total %u "
-				    "exceeds maximum %d", jobserver.tokens,
+				    "exceeds maximum %u", jobserver.tokens,
 				    jobserver.max_tokens);
 		} else {
 			JOBSERVER_DEBUG("target %s: local token returned",
@@ -421,7 +505,8 @@ jobserver_release_token(Job *job)
 		}
 
 		if (pfd.revents & POLLOUT) {
-			if ((r = send(jobserver.slave, "+", 1, 0)) == -1) {
+			enum jobserver_message msg = JMSG_RELEASE;
+			if ((r = send(jobserver.slave, &msg, 1, 0)) == -1) {
 				if (errno == EAGAIN)
 					continue;
 				Punt("jobserver token release failed: send: "

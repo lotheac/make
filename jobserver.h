@@ -1,3 +1,5 @@
+#ifndef JOBSERVER_H
+#define JOBSERVER_H
 /*
  * Copyright (c) 2020 Lauri Tirkkonen <lauri@hacktheplanet.fi>
  *
@@ -14,12 +16,15 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <poll.h>
+
 void jobserver_init(int, unsigned);
 void jobserver_shutdown(void);
 int jobserver_get_slave_fd(void);
-int jobserver_get_master_fd(void);
 bool jobserver_is_master(void);
 bool jobserver_is_slave(void);
-void jobserver_master_communicate(void);
+void jobserver_master_setup_pollfd(struct pollfd *);
+void jobserver_master_communicate(const struct pollfd *);
 void jobserver_acquire_token(Job *job);
 void jobserver_release_token(Job *job);
+#endif /* JOBSERVER_H */

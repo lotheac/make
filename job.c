@@ -818,26 +818,17 @@ handle_running_jobs(void)
 		if (reap_jobs())
 			break;
 		if (usejobserver && jobserver_is_master())
-			pfd.fd = jobserver_get_master_fd();
+			jobserver_master_setup_pollfd(&pfd);
 
 		/* Wait for a signal or for a slave to communicate over
 		 * the jobserver socket */
 		r = ppoll(&pfd, 1, NULL, &emptyset);
 		if (r == -1 && errno == EINTR)
 			continue;
-		if (jobserver_is_master()) {
+		if (usejobserver && jobserver_is_master()) {
 			if (r == -1)
 				Punt("jobserver master: poll failed");
-
-			if (pfd.revents & (POLLHUP|POLLERR|POLLNVAL)) {
-				warnx("jobserver master: error on socket %d, "
-				    "disabling jobserver",
-				    jobserver_get_master_fd());
-				jobserver_shutdown();
-				continue;
-			}
-			if (pfd.revents & POLLIN)
-				jobserver_master_communicate();
+			jobserver_master_communicate(&pfd);
 		}
 	}
 	reset_signal_mask();
