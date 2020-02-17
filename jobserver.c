@@ -45,9 +45,6 @@ static void jobserver_disable(void);
 
 static pid_t mypid;
 
-void enable_sa_restart(void);
-void disable_sa_restart(void);
-
 static int
 sem_wait_interruptible(sem_t *sem)
 {

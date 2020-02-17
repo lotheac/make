@@ -82,6 +82,8 @@ extern void handle_running_jobs(void);
  */
 extern void loop_handle_running_jobs(void);
 extern void reset_signal_mask(void);
+extern void enable_sa_restart(void);
+extern void disable_sa_restart(void);
 
 /* handle_all_signals();
  *	if a signal was received, react accordingly.
