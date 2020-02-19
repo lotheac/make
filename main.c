@@ -816,6 +816,9 @@ main(int argc, char **argv)
 
 		if (!queryFlag && !errored && node_is_real(end_node))
 			run_node(end_node, &errored, &outOfDate);
+
+		if (usejobserver)
+			jobserver_shutdown();
 	}
 
 	/* print the graph now it's been processed if the user requested it */

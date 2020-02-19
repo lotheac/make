@@ -17,6 +17,7 @@
  */
 
 void jobserver_init(unsigned);
+void jobserver_shutdown(void);
 void jobserver_acquire_token(Job *job);
 void jobserver_release_token(Job *job);
 #endif /* JOBSERVER_H */
