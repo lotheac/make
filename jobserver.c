@@ -109,8 +109,7 @@ jobserver_init(unsigned max_tokens)
 	int s[2];
 	char *semname;
 
-	if (DEBUG(JOBSERVER))
-		mypid = getpid();
+	mypid = getpid();
 
 	if (!usejobserver)
 		return;
