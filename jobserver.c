@@ -70,7 +70,7 @@ sem_wait_interruptible(sem_t *sem)
 	}							\
 } while(0)
 
-void
+static void
 jobserver_shutdown(void)
 {
 	if (jobserver) {
@@ -101,6 +101,13 @@ jobserver_disable(void)
 	Job_Wait();
 	jobserver_shutdown();
 	sequential = 1;
+}
+
+void
+jobserver_uninit(void)
+{
+	if (master)
+		jobserver_shutdown();
 }
 
 void

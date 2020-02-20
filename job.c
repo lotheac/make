@@ -883,8 +883,6 @@ Job_Init(int maxJobs)
 	}
 	extra_job = &j[maxJobs];
 	mypid = getpid();
-	if (usejobserver)
-		jobserver_init(maxJobs);
 
 	aborting = 0;
 	setup_all_signals();

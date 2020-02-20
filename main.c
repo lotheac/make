@@ -808,6 +808,7 @@ main(int argc, char **argv)
 
 		choose_engine(compatMake);
 		Job_Init(optj);
+		jobserver_init(optj);
 		if (!queryFlag && node_is_real(begin_node))
 			run_node(begin_node, &errored, &outOfDate);
 
@@ -817,8 +818,7 @@ main(int argc, char **argv)
 		if (!queryFlag && !errored && node_is_real(end_node))
 			run_node(end_node, &errored, &outOfDate);
 
-		if (usejobserver)
-			jobserver_shutdown();
+		jobserver_uninit();
 	}
 
 	/* print the graph now it's been processed if the user requested it */
