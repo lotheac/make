@@ -84,22 +84,12 @@ jobserver_shutdown(void)
 static void
 jobserver_disable(void)
 {
-	/* jobserver communication has failed non-fatally; disable the
+	/*
+	 * jobserver communication has failed non-fatally; disable the
 	 * jobserver and fall back to sequential semantics.
-	 *
-	 * we must wait for all running jobs to complete before starting more.
-	 * the tokens for those running jobs must be released, or other
-	 * processes still using the jobserver could be starved of tokens.
-	 *
-	 * therefore, before we can disable the jobserver and fall back to
-	 * single-job semantics, we need to wait for all running jobs to
-	 * complete. of course, while reaping those jobs, we may fail to
-	 * release tokens already acquired for them, so we may end up fatally
-	 * exiting from jobserver_release_token().
 	 */
-	Job_Wait();
+	fallback_to_sequential();
 	jobserver_shutdown();
-	sequential = 1;
 }
 
 void

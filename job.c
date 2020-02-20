@@ -888,6 +888,14 @@ Job_Init(int maxJobs)
 	setup_all_signals();
 }
 
+void
+fallback_to_sequential(void)
+{
+	Job_Wait();
+	sequential = 1;
+	availableJobs->next = NULL;
+}
+
 bool
 can_start_job(void)
 {

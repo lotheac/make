@@ -99,6 +99,7 @@ extern void handle_one_job(Job *);
 extern int check_dying_signal(void);
 extern bool reap_jobs(void);
 extern const char *shortened_curdir(void);
+extern void fallback_to_sequential(void);
 
 extern const char *basedirectory;
 
