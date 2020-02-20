@@ -127,7 +127,7 @@ jobserver_init(unsigned max_tokens)
 		implicit_token_available = true;
 		jobserver = sem_open(semname, 0);
 		if (jobserver == SEM_FAILED) {
-			warn("jobserver slave: cannot open semaphore");
+			warn("disabling jobserver: cannot open semaphore");
 			jobserver_disable();
 			return;
 		}
