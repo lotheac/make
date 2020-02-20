@@ -78,7 +78,6 @@ jobserver_shutdown(void)
 		if (master)
 			sem_unlink(getenv(MAKEJOBSEMAPHORE));
 	}
-	unsetenv(MAKEJOBSEMAPHORE);
 	usejobserver = false;
 }
 
