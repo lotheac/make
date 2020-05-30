@@ -147,6 +147,7 @@ jobserver_init(unsigned max_tokens)
 			jobserver_shutdown();
 			return;
 		}
+		(void) shm_unlink(tmpl);
 		if (ftruncate(jobfd, sizeof(*jobserver)) == -1) {
 			warn("jobserver init: ftruncate failed");
 			jobserver_shutdown();
