@@ -14,10 +14,12 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/mman.h>
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <semaphore.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -36,6 +38,7 @@
 #include "jobserver.h"
 
 static sem_t *jobserver;
+static int jobfd = -1;
 static bool master;
 
 static bool implicit_token_available;
@@ -74,9 +77,12 @@ static void
 jobserver_shutdown(void)
 {
 	if (jobserver) {
-		sem_close(jobserver);
-		if (master)
-			sem_unlink(getenv(MAKEJOBSEMAPHORE));
+		sem_destroy(jobserver);
+		jobserver = NULL;
+	}
+	if (jobfd != -1) {
+		close(jobfd);
+		jobfd = -1;
 	}
 	usejobserver = false;
 }
@@ -102,40 +108,69 @@ jobserver_uninit(void)
 void
 jobserver_init(unsigned max_tokens)
 {
-	int s[2];
-	char *semname;
-
-	mypid = getpid();
+	char *jobfds;
 
 	if (!usejobserver)
 		return;
 
-	semname = getenv(MAKEJOBSEMAPHORE);
-	if (semname) {
-		/* jobserver sem name from environment */
+	mypid = getpid();
+
+	jobfds = getenv(MAKEJOBSEMAPHORE);
+	if (jobfds) {
+		/* jobserver sem fd number from environment */
+		const char *errstr;
+
 		master = false;
 		implicit_token_available = true;
-		jobserver = sem_open(semname, 0);
-		if (jobserver == SEM_FAILED) {
-			warn("disabling jobserver: cannot open semaphore");
+
+		jobfd = strtonum(jobfds, 1, INT_MAX, &errstr);
+		if (errstr) {
+			warn("disabling jobserver: " MAKEJOBSEMAPHORE "=%s is"
+			    " %s", jobfds, errstr);
+			jobserver_disable();
+			return;
+		}
+		jobserver = mmap(NULL, sizeof(*jobserver),
+		    PROT_READ|PROT_WRITE, MAP_SHARED, jobfd, 0);
+		if (jobserver == MAP_FAILED) {
+			warn("disabling jobserver: mmap failed");
 			jobserver_disable();
 			return;
 		}
 	} else {
 		/* create new semaphore */
+		char buf[16];
+		char tmpl[] = "makejobserver.XXXXXXXXXX";
 		master = true;
-		if (asprintf(&semname, "make.%d", mypid) == -1) {
-			warn("jobserver init: cannot allocate semaphore name");
+		if ((jobfd = shm_mkstemp(tmpl)) == -1) {
+			warn("jobserver init: shm_mkstemp failed");
 			jobserver_shutdown();
 			return;
 		}
-		jobserver = sem_open(semname, O_CREAT|O_EXCL, 0600, max_tokens);
-		if (jobserver == SEM_FAILED) {
-			warn("jobserver init: cannot create semaphore: sem_open");
+		if (ftruncate(jobfd, sizeof(*jobserver)) == -1) {
+			warn("jobserver init: ftruncate failed");
 			jobserver_shutdown();
+			return;
 		}
-		setenv(MAKEJOBSEMAPHORE, semname, 1);
-		free(semname);
+		jobserver = mmap(NULL, sizeof(*jobserver),
+		    PROT_READ|PROT_WRITE, MAP_SHARED, jobfd, 0);
+		if (jobserver == MAP_FAILED) {
+			warn("jobserver init: mmap failed");
+			jobserver_shutdown();
+			return;
+		}
+		if (fcntl(jobfd, F_SETFD, 0) == -1) {
+			warn("jobserver init: fcntl");
+			jobserver_shutdown();
+			return;
+		}
+		if (sem_init(jobserver, 1, max_tokens) == -1) {
+			warn("jobserver init: sem_init");
+			jobserver_shutdown();
+			return;
+		}
+		snprintf(buf, sizeof(buf), "%d", jobfd);
+		setenv(MAKEJOBSEMAPHORE, buf, 1);
 	}
 
 	JOBSERVER_DEBUG("%s initialized in %s", master ? "master" : "slave",

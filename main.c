@@ -194,7 +194,7 @@ MainParseArgs(int argc, char **argv)
 {
 	int c, optend;
 
-#define OPTFLAGS "BC:D:I:SV:d:ef:ij:km:npqrstx"
+#define OPTFLAGS "BC:D:I:JSV:d:ef:ij:km:npqrst"
 #define OPTLETTERS "BSiknpqrst"
 
 	if (pledge("stdio rpath wpath cpath fattr proc exec", NULL) == -1)
@@ -223,6 +223,10 @@ MainParseArgs(int argc, char **argv)
 			break;
 		case 'I':
 			Parse_AddIncludeDir(optarg);
+			record_option(c, optarg);
+			break;
+		case 'J':
+			usejobserver = true;
 			record_option(c, optarg);
 			break;
 		case 'V':
@@ -332,10 +336,6 @@ MainParseArgs(int argc, char **argv)
 		}
 		case 'm':
 			Dir_AddDir(systemIncludePath, optarg);
-			record_option(c, optarg);
-			break;
-		case 'x':
-			usejobserver = true;
 			record_option(c, optarg);
 			break;
 		case -1:
