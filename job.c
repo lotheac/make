@@ -616,8 +616,7 @@ determine_expensive_job(Job *job)
 { 
 	if (expensive_job(job)) {
 		job->flags |= JOB_IS_EXPENSIVE;
-		if (!usejobserver)
-			no_new_jobs = true;
+		no_new_jobs = true;
 	} else
 		job->flags &= ~JOB_IS_EXPENSIVE;
 	if (DEBUG(EXPENSIVE))
@@ -642,6 +641,13 @@ expensive_command(const char *s)
 	const char *p;
 	bool include = false;
 	bool expensive = false;
+
+	/*
+	 * In jobserver mode, the heuristic is disabled so that commands are
+	 * always cheap, unless marked .EXPENSIVE explicitly.
+	 */
+	if (usejobserver)
+		return false;
 
 	/* okay, comments are cheap, always */
 	if (*s == '#')
@@ -689,7 +695,7 @@ expensive_command(const char *s)
 static void
 may_continue_job(Job *job)
 {
-	if (!usejobserver && no_new_jobs) {
+	if (no_new_jobs) {
 		if (DEBUG(EXPENSIVE))
 			fprintf(stderr, "[%ld] expensive -> hold %s\n",
 			    (long)mypid, job->node->name);
@@ -749,7 +755,7 @@ Job_Make(GNode *gn)
 static void
 determine_job_next_step(Job *job)
 {
-	if (!usejobserver && job->flags & JOB_IS_EXPENSIVE) {
+	if (job->flags & JOB_IS_EXPENSIVE) {
 		no_new_jobs = false;
 		if (DEBUG(EXPENSIVE))
 			fprintf(stderr, "[%ld] "
