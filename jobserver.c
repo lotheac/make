@@ -128,7 +128,7 @@ jobserver_init(unsigned max_tokens)
 
 		jobfd = strtonum(jobfds, 1, INT_MAX, &errstr);
 		if (errstr) {
-			warn("disabling jobserver: " MAKEJOBSEMAPHORE "=%s is"
+			warnx("disabling jobserver: " MAKEJOBSEMAPHORE "=%s is"
 			    " %s", jobfds, errstr);
 			jobserver_disable();
 			return;
