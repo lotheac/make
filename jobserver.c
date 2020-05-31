@@ -77,7 +77,9 @@ static void
 jobserver_shutdown(void)
 {
 	if (jobserver) {
-		sem_destroy(jobserver);
+		if (master)
+			sem_destroy(jobserver);
+		munmap(jobserver, sizeof(*jobserver));
 		jobserver = NULL;
 	}
 	if (jobfd != -1) {
@@ -109,6 +111,7 @@ void
 jobserver_init(unsigned max_tokens)
 {
 	char *jobfds;
+	void *addr;
 
 	if (!usejobserver)
 		return;
@@ -117,7 +120,7 @@ jobserver_init(unsigned max_tokens)
 
 	jobfds = getenv(MAKEJOBSEMAPHORE);
 	if (jobfds) {
-		/* jobserver sem fd number from environment */
+		/* jobserver shm fd number from environment */
 		const char *errstr;
 
 		master = false;
@@ -130,17 +133,19 @@ jobserver_init(unsigned max_tokens)
 			jobserver_disable();
 			return;
 		}
-		jobserver = mmap(NULL, sizeof(*jobserver),
+		addr = mmap(NULL, sizeof(*jobserver),
 		    PROT_READ|PROT_WRITE, MAP_SHARED, jobfd, 0);
-		if (jobserver == MAP_FAILED) {
+		if (addr == MAP_FAILED) {
 			warn("disabling jobserver: mmap failed");
 			jobserver_disable();
 			return;
 		}
+		jobserver = addr;
 	} else {
 		/* create new semaphore */
 		char buf[16];
 		char tmpl[] = "makejobserver.XXXXXXXXXX";
+
 		master = true;
 		if ((jobfd = shm_mkstemp(tmpl)) == -1) {
 			warn("jobserver init: shm_mkstemp failed");
@@ -153,13 +158,14 @@ jobserver_init(unsigned max_tokens)
 			jobserver_shutdown();
 			return;
 		}
-		jobserver = mmap(NULL, sizeof(*jobserver),
+		addr = mmap(NULL, sizeof(*jobserver),
 		    PROT_READ|PROT_WRITE, MAP_SHARED, jobfd, 0);
-		if (jobserver == MAP_FAILED) {
+		if (addr == MAP_FAILED) {
 			warn("jobserver init: mmap failed");
 			jobserver_shutdown();
 			return;
 		}
+		jobserver = addr;
 		if (fcntl(jobfd, F_SETFD, 0) == -1) {
 			warn("jobserver init: fcntl");
 			jobserver_shutdown();
