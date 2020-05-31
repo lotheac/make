@@ -1,7 +1,7 @@
 #ifndef GARRAY_H
 #define GARRAY_H
 
-/* $OpenBSD: garray.h,v 1.9 2014/05/18 08:08:50 espie Exp $ */
+/* $OpenBSD: garray.h,v 1.10 2019/12/22 16:53:40 espie Exp $ */
 /* Growable array implementation */
 
 /*

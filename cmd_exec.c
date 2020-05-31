@@ -1,4 +1,4 @@
-/*	$OpenBSD: cmd_exec.c,v 1.10 2016/03/28 11:27:37 chl Exp $ */
+/*	$OpenBSD: cmd_exec.c,v 1.11 2020/01/16 16:07:18 espie Exp $ */
 /*
  * Copyright (c) 2001 Marc Espie.
  *

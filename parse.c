@@ -1,4 +1,4 @@
-/*	$OpenBSD: parse.c,v 1.121 2018/09/20 11:41:28 jsg Exp $	*/
+/*	$OpenBSD: parse.c,v 1.133 2020/04/20 08:17:33 espie Exp $	*/
 /*	$NetBSD: parse.c,v 1.29 1997/03/10 21:20:04 christos Exp $	*/
 
 /*
@@ -184,13 +184,13 @@ static struct {
 	unsigned int special;
 	unsigned int special_op;
 } specials[] = {
-    { P(NODE_EXEC),		SPECIAL_EXEC,		OP_EXEC },
+    { P(NODE_EXEC),		SPECIAL_DEPRECATED,	0 },
     { P(NODE_IGNORE),		SPECIAL_IGNORE, 	OP_IGNORE },
-    { P(NODE_INCLUDES),		SPECIAL_NOTHING,	0 },
-    { P(NODE_INVISIBLE),	SPECIAL_INVISIBLE,	OP_INVISIBLE },
-    { P(NODE_JOIN),		SPECIAL_JOIN,		OP_JOIN },
-    { P(NODE_LIBS),		SPECIAL_NOTHING,	0 },
-    { P(NODE_MADE),		SPECIAL_MADE,		OP_MADE },
+    { P(NODE_INCLUDES),		SPECIAL_DEPRECATED,	0 },
+    { P(NODE_INVISIBLE),	SPECIAL_DEPRECATED,	0 },
+    { P(NODE_JOIN),		SPECIAL_DEPRECATED,	0 },
+    { P(NODE_LIBS),		SPECIAL_DEPRECATED,	0 },
+    { P(NODE_MADE),		SPECIAL_DEPRECATED,	0 },
     { P(NODE_MAIN),		SPECIAL_MAIN,		0 },
     { P(NODE_MAKE),		SPECIAL_MAKE,		OP_MAKE },
     { P(NODE_MAKEFLAGS),	SPECIAL_MFLAGS,		0 },
@@ -198,7 +198,7 @@ static struct {
     { P(NODE_NOTMAIN),		SPECIAL_NOTMAIN,	OP_NOTMAIN },
     { P(NODE_NOTPARALLEL),	SPECIAL_NOTPARALLEL,	0 },
     { P(NODE_NO_PARALLEL),	SPECIAL_NOTPARALLEL,	0 },
-    { P(NODE_NULL),		SPECIAL_NOTHING,	0 },
+    { P(NODE_NULL),		SPECIAL_DEPRECATED,	0 },
     { P(NODE_OPTIONAL),		SPECIAL_OPTIONAL,	OP_OPTIONAL },
     { P(NODE_ORDER),		SPECIAL_ORDER,		0 },
     { P(NODE_PARALLEL),		SPECIAL_PARALLEL,	0 },
@@ -418,6 +418,11 @@ ParseDoSrc(
     const char *esrc)
 {
 	GNode *gn = Targ_FindNodei(src, esrc, TARG_CREATE);
+	if (gn->special == SPECIAL_DEPRECATED) {
+		Parse_Error(PARSE_FATAL, "Deprecated keyword found %s\n",
+		    gn->name);
+		return;
+	}
 	if (gn->special_op) {
 		Array_ForEach(targets, ParseDoSpecial, gn->special_op);
 		return;
@@ -593,7 +598,10 @@ found_delimiter(const char *s)
 		do {
 			p += strcspn(p, "!:");
 			if (*p == '\0')
-			    break;
+			    	break;
+			/* always prefer : to ! if not space separated */
+			if (*p == ':' && *s == '!')
+				return false;
 			p++;
 		} while (*p != '\0' && !ISSPACE(*p));
 
@@ -702,6 +710,13 @@ handle_special_targets(Lst paths)
 
 	for (i = 0; i < gtargets.n; i++) {
 		type = gtargets.a[i]->special;
+		if (type == SPECIAL_DEPRECATED) {
+			Parse_Error(PARSE_FATAL, 
+			    "Deprecated keyword found %s\n",
+			    gtargets.a[i]->name);
+			specType = SPECIAL_ERROR;
+			return 0;
+		}
 		if (type == SPECIAL_PATH) {
 			seen_path++;
 			Lst_AtEnd(paths, find_suffix_path(gtargets.a[i]));

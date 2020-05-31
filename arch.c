@@ -1,4 +1,4 @@
-/*	$OpenBSD: arch.c,v 1.89 2017/07/24 12:07:46 espie Exp $ */
+/*	$OpenBSD: arch.c,v 1.91 2020/01/13 13:54:44 espie Exp $ */
 /*	$NetBSD: arch.c,v 1.17 1996/11/06 17:58:59 christos Exp $	*/
 
 /*

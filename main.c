@@ -1,4 +1,4 @@
-/*	$OpenBSD: main.c,v 1.123 2019/04/22 18:32:09 espie Exp $ */
+/*	$OpenBSD: main.c,v 1.127 2020/01/13 15:41:53 espie Exp $ */
 /*	$NetBSD: main.c,v 1.34 1997/03/24 20:56:36 gwr Exp $	*/
 
 /*

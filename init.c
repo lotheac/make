@@ -1,4 +1,4 @@
-/*	$OpenBSD: init.c,v 1.7 2012/10/02 10:29:30 espie Exp $ */
+/*	$OpenBSD: init.c,v 1.8 2020/01/16 16:07:18 espie Exp $ */
 
 /*
  * Copyright (c) 2001 Marc Espie.

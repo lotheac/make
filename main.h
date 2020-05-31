@@ -1,6 +1,6 @@
 #ifndef MAIN_H
 #define MAIN_H
-/*	$OpenBSD: main.h,v 1.5 2010/07/19 19:46:44 espie Exp $ */
+/*	$OpenBSD: main.h,v 1.6 2020/01/13 14:51:50 espie Exp $ */
 
 /*
  * Copyright (c) 2001 Marc Espie.

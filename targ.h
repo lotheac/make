@@ -1,6 +1,6 @@
 #ifndef TARG_H
 #define TARG_H
-/*	$OpenBSD: targ.h,v 1.13 2013/04/23 14:32:53 espie Exp $ */
+/*	$OpenBSD: targ.h,v 1.15 2020/01/13 15:41:53 espie Exp $ */
 
 /*
  * Copyright (c) 2001 Marc Espie.

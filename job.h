@@ -1,7 +1,7 @@
 #ifndef _JOB_H_
 #define _JOB_H_
 
-/*	$OpenBSD: job.h,v 1.31 2012/12/14 11:10:03 espie Exp $	*/
+/*	$OpenBSD: job.h,v 1.37 2020/01/16 16:07:18 espie Exp $	*/
 /*	$NetBSD: job.h,v 1.5 1996/11/06 17:59:10 christos Exp $ */
 
 /*

@@ -1,4 +1,4 @@
-/*	$OpenBSD: targ.c,v 1.78 2017/06/22 17:08:20 espie Exp $ */
+/*	$OpenBSD: targ.c,v 1.85 2020/01/26 12:41:21 espie Exp $ */
 /*	$NetBSD: targ.c,v 1.11 1997/02/20 16:51:50 christos Exp $	*/
 
 /*
@@ -307,12 +307,10 @@ Targ_PrintType(int type)
 		switch (tbit) {
 		PRINTBIT(OPTIONAL);
 		PRINTBIT(USE);
-		PRINTBIT(EXEC);
 		PRINTBIT(IGNORE);
 		PRINTBIT(PRECIOUS);
 		PRINTBIT(SILENT);
 		PRINTBIT(MAKE);
-		PRINTBIT(JOIN);
 		PRINTBIT(INVISIBLE);
 		PRINTBIT(NOTMAIN);
 		/*XXX: MEMBER is defined, so CONCAT(OP_,MEMBER) gives OP_"%" */

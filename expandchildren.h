@@ -1,6 +1,6 @@
 #ifndef EXPANDCHILDREN_H
 #define EXPANDCHILDREN_H
-/*	$OpenBSD: suff.h,v 1.10 2012/12/06 14:30:35 espie Exp $ */
+/*	$OpenBSD: expandchildren.h,v 1.1 2020/01/13 14:05:21 espie Exp $ */
 
 extern void LinkParent(GNode *, GNode *);
 

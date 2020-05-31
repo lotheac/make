@@ -1,4 +1,4 @@
-/*	$OpenBSD: job.c,v 1.143 2019/12/30 11:01:16 espie Exp $	*/
+/*	$OpenBSD: job.c,v 1.160 2020/01/29 17:06:51 espie Exp $	*/
 /*	$NetBSD: job.c,v 1.16 1996/11/06 17:59:08 christos Exp $	*/
 
 /*
@@ -757,11 +757,14 @@ reap_jobs(void)
 	Job *job;
 
 	while ((pid = waitpid(WAIT_ANY, &status, WNOHANG)) > 0) {
+		if (WIFSTOPPED(status))
+			continue;
 		reaped = true;
 		job = reap_finished_job(pid);
 
 		if (job == NULL) {
-			Punt("Child (%ld) not in table?", (long)pid);
+			Punt("Child (%ld) with status %d not in table?", 
+			    (long)pid, status);
 		} else {
 			handle_job_status(job, status);
 			determine_job_next_step(job);

@@ -1,6 +1,6 @@
 #ifndef ENGINE_H
 #define ENGINE_H
-/*	$OpenBSD: engine.h,v 1.13 2012/12/07 15:08:03 espie Exp $	*/
+/*	$OpenBSD: engine.h,v 1.17 2020/01/13 15:12:58 espie Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.

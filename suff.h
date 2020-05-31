@@ -1,6 +1,6 @@
 #ifndef SUFF_H
 #define SUFF_H
-/*	$OpenBSD: suff.h,v 1.10 2012/12/06 14:30:35 espie Exp $ */
+/*	$OpenBSD: suff.h,v 1.12 2020/01/13 14:05:21 espie Exp $ */
 
 /*
  * Copyright (c) 2001-2019 Marc Espie.
