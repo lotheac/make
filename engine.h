@@ -81,6 +81,25 @@ extern void Make_DoAllVar(GNode *);
  */
 extern int run_gnode(GNode *);
 
+/*
+ * In jobserver mode, a job must hold a "job token" in order to run commands
+ * associated with the job. Every job keeps track of whether it is currently
+ * holding a job token. There are two types of job tokens (plus JOB_TOKEN_NONE,
+ * indicating no token is held by the job). When a job finishes, it must
+ * release a job token of the same type that it originally acquired.
+ *
+ * Every jobserver slave holds exactly one JOB_TOKEN_IMPLICIT, which has
+ * semantically been provided by the parent make for the process (tree) that
+ * eventually ran the child make. This implicit token is also used when a child
+ * make falls back to sequential mode due to an error in jobserver
+ * communication. The availability of the implicit token is tracked in
+ * jobserver.c by each jobserver slave, and it is used in preference to
+ * JOB_TOKEN_SEM, if available.
+ *
+ * JOB_TOKEN_SEM is a job token that has been acquired directly by the slave by
+ * calling sem_wait() on the jobserver shared semaphore, and released via
+ * sem_post().
+ */
 enum job_token_type {
 	JOB_TOKEN_NONE,
 	JOB_TOKEN_IMPLICIT,
